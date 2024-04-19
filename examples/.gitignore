@@ -1,0 +1,10 @@
+*.cpio
+*.initramfs
+
+*.bz2
+*.gz
+*.img
+*.lz4
+*.lzo
+*.xz
+*.zstd
