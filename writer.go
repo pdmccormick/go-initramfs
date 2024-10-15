@@ -6,6 +6,7 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Writer
@@ -273,8 +274,12 @@ const DefaultMkdirPerm Mode = 0o700
 
 func splitBytePrefixAll(s string, c byte) iter.Seq2[int, string] {
 	return func(yield func(index int, prefix string) bool) {
+		if !yield(0, ".") {
+			return
+		}
+
 		for i := range s {
-			if s[i] == c {
+			if i > 0 && s[i] == c {
 				if !yield(i, s[:i]) {
 					return
 				}
@@ -288,6 +293,10 @@ func splitBytePrefixAll(s string, c byte) iter.Seq2[int, string] {
 }
 
 func (iw *Writer) mkdir(path string, perm Mode) error {
+	if path == "" {
+		return nil
+	}
+
 	if _, ok := iw.mkdirs[path]; ok {
 		return nil
 	}
@@ -314,8 +323,13 @@ func (iw *Writer) MkdirAll(path string, perm Mode) error {
 		perm = DefaultMkdirPerm
 	}
 
-	if err := iw.mkdir(".", perm); err != nil {
-		return err
+	path = strings.TrimPrefix(path, "/")
+	if path == "" {
+		path = "."
+	}
+
+	if _, ok := iw.mkdirs[path]; ok {
+		return nil
 	}
 
 	for _, prefix := range splitBytePrefixAll(path, '/') {
@@ -332,18 +346,30 @@ func (iw *Writer) MkdirAll(path string, perm Mode) error {
 //   - If Magic is blank, it will be given a default value of [Magic_070701]
 //   - NumLinks will be minimum 1
 //   - If Inode is 0 and this is not a trailer, an inode number will be assigned
+//   - All leading slashes will be removed from the Filename
 //   - FilenameSize will be set to the length of Filename plus 1
 func (iw *Writer) WriteHeader(hdr *Header) error {
 	if iw.closed {
 		return os.ErrClosed
 	}
 
+	filename := strings.TrimPrefix(hdr.Filename, "/")
+	if filename == "" {
+		filename = "."
+	}
+	hdr.Filename = filename
+
 	if hdr.Mode.Dir() {
 		// Make note that this directory is being created
-		iw.mkdirs[hdr.Filename] = struct{}{}
+		iw.mkdirs[filename] = struct{}{}
+	}
+
+	if hdr.Trailer() {
+		clear(iw.mkdirs)
 	} else {
 		// Ensure that all parent directories have been added
-		dir := filepath.Dir(hdr.Filename)
+		dir := filepath.Dir(filename)
+
 		if err := iw.MkdirAll(dir, 0); err != nil {
 			return err
 		}
