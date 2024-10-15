@@ -31,7 +31,7 @@ type Writer struct {
 var (
 	ErrBadAlignment      = errors.New("initramfs: alignment must itself be a multiple of 4")
 	ErrBadDataAlignment  = errors.New("initramfs: unable to align data as requested given the filename")
-	ErrAlreadyCompressed = errors.New("initramfs: writer compression is already being already")
+	ErrAlreadyCompressed = errors.New("initramfs: writer compression is already being applied")
 )
 
 func NewWriter(w io.Writer) *Writer {
@@ -388,8 +388,6 @@ func (iw *Writer) writeHeader(hdr *Header) error {
 		// once this header and following alignment is applied?
 		var fill = alignFill(iw.written+int64(hdr.Size()), alignTo)
 
-		// log.Printf("N=%d dataAlignTo=%d fill=%d", iw.written, alignTo, fill)
-
 		// If the fill length itself is not 4 byte aligned, then the post-header
 		// alignment will throw off the data alignment.
 		//
@@ -402,8 +400,6 @@ func (iw *Writer) writeHeader(hdr *Header) error {
 		if err := iw.writePad(fill); err != nil {
 			return err
 		}
-
-		// log.Printf("dataAlign fill=%d N=%d mod4=%d mod16=%d", fill, iw.written, iw.written%4, iw.written%16)
 	}
 
 	if n, err := hdr.WriteTo(iw.curW); err != nil {
