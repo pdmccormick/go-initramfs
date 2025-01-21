@@ -3,6 +3,7 @@ package initramfs
 import (
 	"errors"
 	"io"
+	"io/fs"
 	"iter"
 	"os"
 	"path/filepath"
@@ -449,3 +450,70 @@ func (iw *Writer) writeHeader(hdr *Header) error {
 
 // Write the end-of-archive sentinel trailer entry.
 func (iw *Writer) WriteTrailer() error { return iw.WriteHeader(&trailerHeader) }
+
+type AddFSFilterFunc func(*Header) (io.Reader, error)
+
+var SkipEntry = errors.New("initramfs: do not write this entry")
+
+func (iw *Writer) AddFS(fsys fs.FS, filterFunc AddFSFilterFunc) error {
+	return fs.WalkDir(fsys, "/", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fs.SkipDir
+		}
+
+		fi, err := d.Info()
+		if err != nil {
+			return err
+		}
+
+		var hdr Header
+		if err := hdr.FromFSFileInfo(fi); err != nil {
+			return err
+		}
+
+		hdr.Filename = strings.TrimPrefix(path, "/")
+
+		var r io.Reader
+
+		defer func() {
+			if r != nil {
+				if c, ok := r.(io.Closer); ok {
+					c.Close()
+				}
+			}
+		}()
+
+		if filterFunc != nil {
+			r, err = filterFunc(&hdr)
+			if err != nil {
+				if err == SkipEntry {
+					if hdr.Mode.Dir() {
+						err = fs.SkipDir
+					} else {
+						err = nil
+					}
+				}
+				return err
+			}
+		}
+
+		if err := iw.WriteHeader(&hdr); err != nil {
+			return err
+		}
+
+		if !fi.IsDir() && hdr.DataSize > 0 {
+			if r == nil {
+				r, err = fsys.Open(path)
+				if err != nil {
+					return err
+				}
+			}
+
+			if _, err := iw.ReadFrom(r); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
