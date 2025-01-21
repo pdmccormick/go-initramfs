@@ -302,7 +302,7 @@ func (iw *Writer) mkdir(path string, perm Mode) error {
 	}
 
 	var hdr = Header{
-		Mode:     Mode_Dir | perm&Mode_PermsMask,
+		Mode:     ModeDir | perm&ModePermsMask,
 		Filename: path,
 	}
 

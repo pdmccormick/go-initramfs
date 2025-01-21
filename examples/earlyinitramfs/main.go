@@ -94,7 +94,7 @@ func writeEarly(iw *initramfs.Writer, amdGlob, intelGlob string) error {
 		log.Printf("Concatenating %d files (%d bytes total) from %s", len(matches), data.Len(), file.SrcPattern)
 
 		var (
-			mode = initramfs.Mode_File.WithPerms(0o664)
+			mode = initramfs.ModeFile.WithPerms(0o664)
 			hdr  = initramfs.Header{
 				Filename: file.Dst,
 				Mode:     mode,

@@ -46,7 +46,7 @@ func testWriteHeader(t *testing.T, w *Writer, hdr *Header) {
 
 func testMkdirHeader(t *testing.T, w *Writer, filename string, template *Header) {
 	var hdr = Header{
-		Mode: Mode_Dir | 0o755,
+		Mode: ModeDir | 0o755,
 	}
 
 	if template != nil {

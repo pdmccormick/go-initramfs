@@ -26,7 +26,7 @@ func TestWriter_ParentDirs(t *testing.T) {
 		testMkdirAll(t, w, "/lib/modules/kernel/fs", 0o700)
 
 		var hdr = Header{
-			Mode:     Mode_File | 0o440,
+			Mode:     ModeFile | 0o440,
 			Filename: "/lib/modules/kernel/drivers/net/e1000.ko",
 		}
 		testWriteHeader(t, w, &hdr)

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"syscall"
 	"time"
 )
 
@@ -96,27 +98,27 @@ func (m Mode) String() string {
 	return string(s[:])
 }
 
-func (m Mode) FileType() Mode { return m & Mode_FileTypeMask }
-func (m Mode) Perms() int     { return int(m & Mode_PermsMask) }
+func (m Mode) FileType() Mode { return m & ModeFileTypeMask }
+func (m Mode) Perms() int     { return int(m & ModePermsMask) }
 
-func (m Mode) Socket() bool      { return m.FileType() == Mode_Socket }
-func (m Mode) Symlink() bool     { return m.FileType() == Mode_Symlink }
-func (m Mode) File() bool        { return m.FileType() == Mode_File }
-func (m Mode) BlockDevice() bool { return m.FileType() == Mode_BlockDevice }
-func (m Mode) Dir() bool         { return m.FileType() == Mode_Dir }
-func (m Mode) CharDevice() bool  { return m.FileType() == Mode_CharDevice }
-func (m Mode) FIFO() bool        { return m.FileType() == Mode_FIFO }
-func (m Mode) SUID() bool        { return m.FileType() == Mode_SUID }
-func (m Mode) SGID() bool        { return m.FileType() == Mode_SGID }
-func (m Mode) Sticky() bool      { return m.FileType() == Mode_Sticky }
+func (m Mode) Socket() bool      { return m.FileType() == ModeSocket }
+func (m Mode) Symlink() bool     { return m.FileType() == ModeSymlink }
+func (m Mode) File() bool        { return m.FileType() == ModeFile }
+func (m Mode) BlockDevice() bool { return m.FileType() == ModeBlockDevice }
+func (m Mode) Dir() bool         { return m.FileType() == ModeDir }
+func (m Mode) CharDevice() bool  { return m.FileType() == ModeCharDevice }
+func (m Mode) FIFO() bool        { return m.FileType() == ModeNamedPipe }
+func (m Mode) SUID() bool        { return (m & ModeSetuid) == ModeSetuid }
+func (m Mode) SGID() bool        { return (m & ModeSetgid) == ModeSetuid }
+func (m Mode) Sticky() bool      { return (m & ModeSticky) == ModeSticky }
 
 func (m *Mode) SetFileType(ftype int) Mode {
-	*m = (*m &^ Mode_FileTypeMask) | (Mode(ftype) & Mode_FileTypeMask)
+	*m = (*m &^ ModeFileTypeMask) | (Mode(ftype) & ModeFileTypeMask)
 	return *m
 }
 
 func (m *Mode) SetPerms(perms int) Mode {
-	*m = (*m &^ Mode_PermsMask) | (Mode(perms) & Mode_PermsMask)
+	*m = (*m &^ ModePermsMask) | (Mode(perms) & ModePermsMask)
 	return *m
 }
 
@@ -132,19 +134,84 @@ func (m *Mode) ClearBits(bits int) Mode {
 
 func (m Mode) WithPerms(perms int) Mode { return m.SetPerms(perms) }
 
+func (m Mode) FSFileMode() (fm fs.FileMode) {
+	switch m.FileType() {
+	case ModeSocket:
+		fm |= fs.ModeSocket
+	case ModeSymlink:
+		fm |= fs.ModeSymlink
+	case ModeFile:
+	case ModeBlockDevice:
+		fm |= fs.ModeDevice
+	case ModeDir:
+		fm |= fs.ModeDir
+	case ModeCharDevice:
+		fm |= fs.ModeDevice | fs.ModeCharDevice
+	case ModeNamedPipe:
+		fm |= fs.ModeNamedPipe
+	}
+
+	fm |= fs.FileMode(m.Perms())
+	return
+}
+
+func FromFSFileMode(fm fs.FileMode) (m Mode) {
+	t := fm & fs.ModeType
+
+	if (t & fs.ModeDir) != 0 {
+		m |= ModeDir
+	}
+
+	if (t & fs.ModeSymlink) != 0 {
+		m |= ModeSymlink
+	}
+
+	if (t & fs.ModeNamedPipe) != 0 {
+		m |= ModeNamedPipe
+	}
+
+	if (t & fs.ModeSocket) != 0 {
+		m |= ModeSocket
+	}
+
+	if (t & fs.ModeCharDevice) != 0 {
+		m |= ModeCharDevice
+	} else if (t & fs.ModeDevice) != 0 {
+		m |= ModeBlockDevice
+	}
+
+	if m.FileType() == 0 {
+		m |= ModeFile
+	}
+
+	if (t & fs.ModeSetuid) != 0 {
+		m |= ModeSetuid
+	}
+	if (t & fs.ModeSetgid) != 0 {
+		m |= ModeSetgid
+	}
+	if (t & fs.ModeSticky) != 0 {
+		m |= ModeSticky
+	}
+
+	m.SetPerms(int(fm & fs.ModePerm))
+
+	return
+}
+
 const (
-	Mode_FileTypeMask Mode = 0o170_000
-	Mode_Socket       Mode = 0o140_000 // File type for sockets.
-	Mode_Symlink      Mode = 0o120_000 // File type for symbolic links (file data is link target).
-	Mode_File         Mode = 0o100_000 // File type for regular files.
-	Mode_BlockDevice  Mode = 0o060_000 // File type for block devices.
-	Mode_Dir          Mode = 0o040_000 // File type for directories.
-	Mode_CharDevice   Mode = 0o020_000 // File type for character devices.
-	Mode_FIFO         Mode = 0o010_000 // File type for named pipes or FIFO's.
-	Mode_SUID         Mode = 0o004_000 // SUID bit. See https://man7.org/linux/man-pages/man2/setfsuid.2.html#DESCRIPTION
-	Mode_SGID         Mode = 0o002_000 // SGID bit. See https://man7.org/linux/man-pages/man2/setfsgid.2.html#DESCRIPTION
-	Mode_Sticky       Mode = 0o001_000 // Sticky bit. See https://www.man7.org/linux/man-pages/man1/chmod.1.html#RESTRICTED_DELETION_FLAG_OR_STICKY_BIT
-	Mode_PermsMask    Mode = 0o000_777 // Permission bits (read/write/execute for user, group and other). See https://man7.org/linux/man-pages/man1/chmod.1.html#DESCRIPTION
+	ModeFileTypeMask Mode = 0o170_000
+	ModeSocket       Mode = 0o140_000 // File type for sockets.
+	ModeSymlink      Mode = 0o120_000 // File type for symbolic links (file data is link target).
+	ModeFile         Mode = 0o100_000 // File type for regular files.
+	ModeBlockDevice  Mode = 0o060_000 // File type for block devices.
+	ModeDir          Mode = 0o040_000 // File type for directories.
+	ModeCharDevice   Mode = 0o020_000 // File type for character devices.
+	ModeNamedPipe    Mode = 0o010_000 // File type for named pipes or FIFO's.
+	ModeSetuid       Mode = 0o004_000 // SUID bit. See https://man7.org/linux/man-pages/man2/setfsuid.2.html#DESCRIPTION
+	ModeSetgid       Mode = 0o002_000 // SGID bit. See https://man7.org/linux/man-pages/man2/setfsgid.2.html#DESCRIPTION
+	ModeSticky       Mode = 0o001_000 // Sticky bit. See https://www.man7.org/linux/man-pages/man1/chmod.1.html#RESTRICTED_DELETION_FLAG_OR_STICKY_BIT
+	ModePermsMask    Mode = 0o000_777 // Permission bits (read/write/execute for user, group and other). See https://man7.org/linux/man-pages/man1/chmod.1.html#DESCRIPTION
 
 	UserRead     Mode = 0o400
 	UserWrite    Mode = 0o200
@@ -439,6 +506,46 @@ func (bin *rawBinaryHeader) setField(i int, v uint32) {
 	bin[offs+1] = byte((v >> 16) & 0xff)
 	bin[offs+2] = byte((v >> 8) & 0xff)
 	bin[offs+3] = byte((v >> 0) & 0xff)
+}
+
+const MaxDataSize = ^uint32(0)
+
+func HeaderFromFSFileInfo(fi fs.FileInfo) (*Header, error) {
+	var hdr Header
+	if err := hdr.FromFSFileInfo(fi); err != nil {
+		return nil, err
+	}
+	return &hdr, nil
+}
+
+var ErrFileSizeTooLarge = errors.New("initramfs: file size exceeds the limit of cpio header format")
+
+func (hdr *Header) FromFSFileInfo(fi fs.FileInfo) error {
+	if fi.Size() > int64(MaxDataSize) {
+		return ErrFileSizeTooLarge
+	}
+
+	*hdr = Header{
+		Filename: fi.Name(),
+		DataSize: uint32(fi.Size()),
+		Mode:     FromFSFileMode(fi.Mode()),
+		Mtime:    fi.ModTime().Truncate(1 * time.Second),
+	}
+
+	switch sys := fi.Sys().(type) {
+	case *syscall.Stat_t:
+		hdr.Inode = uint32(sys.Ino)
+		hdr.Mode = Mode(sys.Mode)
+		hdr.Uid = sys.Uid
+		hdr.Gid = sys.Gid
+		hdr.NumLinks = uint32(sys.Nlink)
+		hdr.Major = uint32(sys.Dev>>8) & 0xff
+		hdr.Minor = uint32(sys.Dev) & 0xff
+		hdr.RMajor = uint32(sys.Rdev>>8) & 0xff
+		hdr.RMinor = uint32(sys.Rdev) & 0xff
+	}
+
+	return nil
 }
 
 // Compute the 32-bit unsigned sum of all the data bytes.
