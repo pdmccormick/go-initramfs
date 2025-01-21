@@ -66,6 +66,11 @@ type CompressionEntry struct {
 	Compression string `json:"Compression"`
 }
 
+type Entry struct {
+	initramfs.Header
+	LinkTarget string `json:",omitempty"`
+}
+
 func (p *Processor) start() {
 	fmt.Fprintf(p.W, "[\n")
 }
@@ -120,9 +125,21 @@ Loop:
 			return err
 		}
 
-		p.emitEntry(hdr)
+		var entry = Entry{
+			Header: *hdr,
+		}
 
-		if dumpHex && hdr.DataSize > 0 {
+		if hdr.Mode.Symlink() {
+			s, err := r.ReadString()
+			if err != nil {
+				return err
+			}
+			entry.LinkTarget = s
+		}
+
+		p.emitEntry(entry)
+
+		if !hdr.Mode.Symlink() && dumpHex && hdr.DataSize > 0 {
 			var data [512]byte
 			if n, err := r.Read(data[:]); err != nil {
 				return err
