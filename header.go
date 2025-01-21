@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -248,6 +250,12 @@ type Header struct {
 	// Variable length field
 	Filename string
 }
+
+func CleanFilename(filename string) string {
+	return strings.TrimPrefix(filepath.Clean(filename), "/")
+}
+
+func (hdr *Header) CleanFilename() string { return CleanFilename(hdr.Filename) }
 
 // Formats the header similarly to the long listing output of `ls -l`.
 func (hdr *Header) String() string {

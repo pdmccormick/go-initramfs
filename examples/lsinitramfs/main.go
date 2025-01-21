@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
@@ -28,7 +30,11 @@ var (
 func main() {
 	flag.Parse()
 
-	var name = flag.Args()[0]
+	var (
+		args     = flag.Args()
+		name     = args[0]
+		patterns = args[1:]
+	)
 
 	f, err := os.Open(name)
 	if err != nil {
@@ -40,15 +46,43 @@ func main() {
 	setupCompressReaders()
 
 	var r = initramfs.NewReader(f)
-	if err := list(os.Stdout, r); err != nil {
+	if err := list(os.Stdout, r, patterns); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func list(out io.Writer, r *initramfs.Reader) error {
+func matchFilename(filename, pattern string) bool {
+	if m, _ := filepath.Match(pattern, filename); m {
+		return true
+	}
+
+	if filename == pattern || strings.HasPrefix(filename, pattern+"/") {
+		return true
+	}
+
+	return false
+}
+
+func list(out io.Writer, r *initramfs.Reader, paths []string) error {
 Loop:
 	for {
 		for _, hdr := range r.All() {
+			var filename = hdr.CleanFilename()
+
+			if len(paths) > 0 {
+				var ok bool
+				for _, path := range paths {
+					if matchFilename(filename, path) {
+						ok = true
+						break
+					}
+				}
+
+				if !ok {
+					continue Loop
+				}
+			}
+
 			if hdr.Trailer() && *hideTrailerFlag {
 				continue
 			}
