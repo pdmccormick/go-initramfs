@@ -20,8 +20,7 @@ type Writer struct {
 	curW  io.Writer
 	compW io.Writer
 
-	mkdirs    map[string]struct{}
-	nextInode uint32
+	mkdirs map[string]struct{}
 
 	written       int64 // FIXME TODO: rename N
 	fileRemaining int64
@@ -391,12 +390,6 @@ func (iw *Writer) writeHeader(hdr *Header) error {
 	if hdr.NumLinks == 0 {
 		hdr.NumLinks = 1
 	}
-
-	if hdr.Inode == 0 && !hdr.Trailer() {
-		hdr.Inode = iw.nextInode
-	}
-
-	iw.nextInode = max(iw.nextInode, hdr.Inode) + 1
 
 	hdr.FilenameSize = uint32(len(hdr.Filename) + 1)
 
