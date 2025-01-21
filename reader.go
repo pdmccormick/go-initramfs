@@ -8,10 +8,12 @@ import (
 )
 
 type Reader struct {
-	r     io.Reader
-	br    *bufio.Reader
-	nread int64
-	fileR io.LimitedReader
+	r        io.Reader
+	br       *bufio.Reader
+	nread    int64
+	fileR    io.LimitedReader
+	dataSize uint32
+	fileEof  bool
 }
 
 var (
@@ -41,7 +43,34 @@ func (r *Reader) Next() (*Header, error) {
 }
 
 // Reads file data up to the length indicated by [Header.DataSize].
-func (r *Reader) Read(buf []byte) (int, error) { return r.fileR.Read(buf) }
+func (r *Reader) Read(buf []byte) (int, error) {
+	if r.fileEof {
+		return 0, io.EOF
+	}
+	n, err := r.fileR.Read(buf)
+	if err == io.EOF {
+		r.fileEof = true
+	}
+	return n, err
+}
+
+func (r *Reader) ReadString() (string, error) {
+	if r.fileEof {
+		return "", io.EOF
+	}
+
+	r.fileEof = true
+	if r.dataSize == 0 || r.fileR.N == 0 {
+		return "", nil
+	}
+
+	p := make([]byte, r.fileR.N)
+	if _, err := io.ReadFull(&r.fileR, p); err != nil {
+		return "", err
+	}
+
+	return string(p), nil
+}
 
 // Copy all remaining current file data to the writer.
 func (r *Reader) WriteTo(w io.Writer) (n int64, err error) {
@@ -140,6 +169,8 @@ func (r *Reader) next(hdr *Header) error {
 
 	hdr.DataOffset = r.nread
 	r.fileR.N = int64(hdr.DataSize)
+	r.dataSize = hdr.DataSize
+	r.fileEof = false
 
 	// Assume file has already been read for the purposes of tracking current read position
 	r.nread += r.fileR.N
