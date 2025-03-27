@@ -51,6 +51,14 @@ func TestMode(t *testing.T) {
 				t.Errorf("expected: %s", expect)
 				t.Errorf("got     : %s", got)
 			}
+
+			fm := tc.m.FSFileMode()
+			m0 := FromFSFileMode(fm)
+
+			if expect, got := tc.m, m0; expect != got {
+				t.Errorf("expected: %s", expect)
+				t.Errorf("got     : %s", got)
+			}
 		})
 	}
 }

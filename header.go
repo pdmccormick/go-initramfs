@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"time"
 )
 
@@ -184,6 +185,83 @@ func (m *Mode) ClearBits(bits int) Mode {
 }
 
 func (m Mode) WithPerms(perms int) Mode { return m.SetPerms(perms) }
+
+func (m Mode) FSFileMode() (fm fs.FileMode) {
+	fm = fs.FileMode(m.Perms()) & fs.ModePerm
+
+	switch {
+	case m.File():
+		// no-op
+	case m.Dir():
+		fm |= fs.ModeDir
+	case m.Symlink():
+		fm |= fs.ModeSymlink
+	case m.FIFO():
+		fm |= fs.ModeNamedPipe
+	case m.Socket():
+		fm |= fs.ModeSocket
+	case m.BlockDevice():
+		fm |= fs.ModeDevice
+	case m.CharDevice():
+		fm |= fs.ModeDevice | fs.ModeCharDevice
+	}
+
+	if m.SUID() {
+		fm |= fs.ModeSetuid
+	}
+
+	if m.SGID() {
+		fm |= fs.ModeSetgid
+	}
+
+	if m.Sticky() {
+		fm |= fs.ModeSticky
+	}
+
+	return
+}
+
+func FromFSFileMode(fm fs.FileMode) (m Mode) {
+	m = Mode(fm&fs.ModePerm) & Mode_PermsMask
+
+	switch {
+	case (fm & fs.ModeDir) == fs.ModeDir:
+		m |= Mode_Dir
+
+	case (fm & fs.ModeSymlink) == fs.ModeSymlink:
+		m |= Mode_Symlink
+
+	case (fm & fs.ModeNamedPipe) == fs.ModeNamedPipe:
+		m |= Mode_FIFO
+
+	case (fm & fs.ModeSocket) == fs.ModeSocket:
+		m |= Mode_Socket
+
+	case (fm & fs.ModeDevice) == fs.ModeDevice:
+		if (fm & fs.ModeCharDevice) == fs.ModeCharDevice {
+			m |= Mode_CharDevice
+		} else {
+			m |= Mode_BlockDevice
+		}
+
+	default:
+		m |= Mode_File
+	}
+
+	if (fm & fs.ModeSticky) == fs.ModeSticky {
+		m |= Mode_Sticky
+	}
+
+	if (fm & fs.ModeSetuid) == fs.ModeSetuid {
+		m |= Mode_SUID
+	}
+
+	if (fm & fs.ModeSetgid) == fs.ModeSetgid {
+		m |= Mode_SGID
+	}
+
+	return
+}
 
 // Header for a file member within a cpio archive.
 type Header struct {
