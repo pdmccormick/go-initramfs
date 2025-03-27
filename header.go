@@ -40,98 +40,6 @@ var trailerHeader = Header{
 // File mode and permission bits
 type Mode uint32
 
-func (m Mode) String() string {
-	var s = [...]byte{'-', '-', '-', '-', '-', '-', '-', '-', '-', '-'}
-
-	if m.Dir() {
-		s[0] = 'd'
-	}
-	if m.Socket() {
-		s[0] = 's'
-	}
-	if m.Symlink() {
-		s[0] = 'l'
-	}
-	if m.BlockDevice() {
-		s[0] = 'b'
-	}
-
-	if m.CharDevice() {
-		s[0] = 'c'
-	}
-	if m.FIFO() {
-		s[0] = 'p'
-	}
-
-	if (m & UserRead) != 0 {
-		s[1] = 'r'
-	}
-	if (m & UserWrite) != 0 {
-		s[2] = 'w'
-	}
-	if (m & UserExecute) != 0 {
-		s[3] = 'x'
-	}
-
-	if (m & GroupRead) != 0 {
-		s[4] = 'r'
-	}
-	if (m & GroupWrite) != 0 {
-		s[5] = 'w'
-	}
-	if (m & GroupExecute) != 0 {
-		s[6] = 'x'
-	}
-
-	if (m & OtherRead) != 0 {
-		s[7] = 'r'
-	}
-	if (m & OtherWrite) != 0 {
-		s[8] = 'w'
-	}
-	if (m & OtherExecute) != 0 {
-		s[9] = 'x'
-	}
-
-	return string(s[:])
-}
-
-func (m Mode) FileType() Mode { return m & Mode_FileTypeMask }
-func (m Mode) Perms() int     { return int(m & Mode_PermsMask) }
-
-func (m Mode) Socket() bool      { return m.FileType() == Mode_Socket }
-func (m Mode) Symlink() bool     { return m.FileType() == Mode_Symlink }
-func (m Mode) File() bool        { return m.FileType() == Mode_File }
-func (m Mode) BlockDevice() bool { return m.FileType() == Mode_BlockDevice }
-func (m Mode) Dir() bool         { return m.FileType() == Mode_Dir }
-func (m Mode) CharDevice() bool  { return m.FileType() == Mode_CharDevice }
-func (m Mode) FIFO() bool        { return m.FileType() == Mode_FIFO }
-func (m Mode) SUID() bool        { return m.FileType() == Mode_SUID }
-func (m Mode) SGID() bool        { return m.FileType() == Mode_SGID }
-func (m Mode) Sticky() bool      { return m.FileType() == Mode_Sticky }
-
-func (m *Mode) SetFileType(ftype int) Mode {
-	*m = (*m &^ Mode_FileTypeMask) | (Mode(ftype) & Mode_FileTypeMask)
-	return *m
-}
-
-func (m *Mode) SetPerms(perms int) Mode {
-	*m = (*m &^ Mode_PermsMask) | (Mode(perms) & Mode_PermsMask)
-	return *m
-}
-
-func (m *Mode) SetBits(bits int) Mode {
-	*m |= Mode(bits)
-	return *m
-}
-
-func (m *Mode) ClearBits(bits int) Mode {
-	*m &^= Mode(bits)
-	return *m
-}
-
-func (m Mode) WithPerms(perms int) Mode { return m.SetPerms(perms) }
-
 const (
 	Mode_FileTypeMask Mode = 0o170_000
 	Mode_Socket       Mode = 0o140_000 // File type for sockets.
@@ -156,6 +64,126 @@ const (
 	OtherWrite   Mode = 0o002
 	OtherExecute Mode = 0o001
 )
+
+func (m Mode) FileType() Mode { return m & Mode_FileTypeMask }
+func (m Mode) Perms() int     { return int(m & Mode_PermsMask) }
+
+func (m Mode) Socket() bool      { return m.FileType() == Mode_Socket }
+func (m Mode) Symlink() bool     { return m.FileType() == Mode_Symlink }
+func (m Mode) File() bool        { return m.FileType() == Mode_File }
+func (m Mode) BlockDevice() bool { return m.FileType() == Mode_BlockDevice }
+func (m Mode) Dir() bool         { return m.FileType() == Mode_Dir }
+func (m Mode) CharDevice() bool  { return m.FileType() == Mode_CharDevice }
+func (m Mode) FIFO() bool        { return m.FileType() == Mode_FIFO }
+func (m Mode) SUID() bool        { return (m & Mode_SUID) == Mode_SUID }
+func (m Mode) SGID() bool        { return (m & Mode_SGID) == Mode_SGID }
+func (m Mode) Sticky() bool      { return (m & Mode_Sticky) == Mode_Sticky }
+
+func (m Mode) UserRead() bool     { return (m & UserRead) == UserRead }
+func (m Mode) UserWrite() bool    { return (m & UserWrite) == UserWrite }
+func (m Mode) UserExecute() bool  { return (m & UserExecute) == UserExecute }
+func (m Mode) GroupRead() bool    { return (m & GroupRead) == GroupRead }
+func (m Mode) GroupWrite() bool   { return (m & GroupWrite) == GroupWrite }
+func (m Mode) GroupExecute() bool { return (m & GroupExecute) == GroupExecute }
+func (m Mode) OtherRead() bool    { return (m & OtherRead) == OtherRead }
+func (m Mode) OtherWrite() bool   { return (m & OtherWrite) == OtherWrite }
+func (m Mode) OtherExecute() bool { return (m & OtherExecute) == OtherExecute }
+
+func (m Mode) String() string {
+	var s = [...]byte{'-', '-', '-', '-', '-', '-', '-', '-', '-', '-'}
+
+	switch {
+	case m.File():
+		s[0] = '-'
+	case m.Dir():
+		s[0] = 'd'
+	case m.BlockDevice():
+		s[0] = 'b'
+	case m.CharDevice():
+		s[0] = 'c'
+	case m.Symlink():
+		s[0] = 'l'
+	case m.FIFO():
+		s[0] = 'p'
+	case m.Socket():
+		s[0] = 's'
+	}
+
+	if m.UserRead() {
+		s[1] = 'r'
+	}
+	if m.UserWrite() {
+		s[2] = 'w'
+	}
+
+	if m.SUID() {
+		if m.UserExecute() {
+			s[3] = 's'
+		} else {
+			s[3] = 'S'
+		}
+	} else if m.UserExecute() {
+		s[3] = 'x'
+	}
+
+	if m.GroupRead() {
+		s[4] = 'r'
+	}
+	if m.GroupWrite() {
+		s[5] = 'w'
+	}
+
+	if m.SGID() {
+		if m.GroupExecute() {
+			s[6] = 's'
+		} else {
+			s[6] = 'S'
+		}
+	} else if m.GroupExecute() {
+		s[6] = 'x'
+	}
+
+	if m.OtherRead() {
+		s[7] = 'r'
+	}
+	if m.OtherWrite() {
+		s[8] = 'w'
+	}
+
+	if m.Sticky() {
+		if m.OtherExecute() {
+			s[9] = 't'
+		} else {
+			s[9] = 'T'
+		}
+	} else if m.OtherExecute() {
+		s[9] = 'x'
+	}
+
+	return string(s[:])
+}
+
+func (m *Mode) SetFileType(ftype int) Mode {
+	*m = (*m &^ Mode_FileTypeMask) | (Mode(ftype) & Mode_FileTypeMask)
+	return *m
+}
+
+func (m *Mode) SetPerms(perms int) Mode {
+	*m = (*m &^ Mode_PermsMask) | (Mode(perms) & Mode_PermsMask)
+	return *m
+}
+
+func (m *Mode) SetBits(bits int) Mode {
+	*m |= Mode(bits)
+	return *m
+}
+
+func (m *Mode) ClearBits(bits int) Mode {
+	*m &^= Mode(bits)
+	return *m
+}
+
+func (m Mode) WithPerms(perms int) Mode { return m.SetPerms(perms) }
 
 // Header for a file member within a cpio archive.
 type Header struct {

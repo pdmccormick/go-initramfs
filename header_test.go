@@ -6,6 +6,55 @@ import (
 	"time"
 )
 
+func TestMode(t *testing.T) {
+	var testcases = []struct {
+		s string
+		m Mode
+	}{
+		{"-rwxrwxrwx", Mode_File | 0o777},
+		{"drwxrwxrwx", Mode_Dir | 0o777},
+		{"brwxrwxrwx", Mode_BlockDevice | 0o777},
+		{"crwxrwxrwx", Mode_CharDevice | 0o777},
+		{"lrwxrwxrwx", Mode_Symlink | 0o777},
+		{"prwxrwxrwx", Mode_FIFO | 0o777},
+		{"srwxrwxrwx", Mode_Socket | 0o777},
+
+		{"-rwxrwxrwx", Mode_File | 0o777},
+		{"-rwxr-xr-x", Mode_File | 0o755},
+		{"-r-xr-xr-x", Mode_File | 0o555},
+		{"-r---w---x", Mode_File | 0o421},
+		{"--w---xr--", Mode_File | 0o214},
+		{"---xr---w-", Mode_File | 0o142},
+
+		// SUID bit
+		{"---S------", Mode_File | 0o4000},
+		{"---s------", Mode_File | 0o4100},
+		{"d--s------", Mode_Dir | 0o4100},
+		{"d--S------", Mode_Dir | 0o4000},
+
+		// SGID bit
+		{"------S---", Mode_File | 0o2000},
+		{"------s---", Mode_File | 0o2010},
+		{"d-----s---", Mode_Dir | 0o2010},
+		{"d-----S---", Mode_Dir | 0o2000},
+
+		// Sticky bit
+		{"---------T", Mode_File | 0o1000},
+		{"---------t", Mode_File | 0o1001},
+		{"d--------t", Mode_Dir | 0o1001},
+		{"d--------T", Mode_Dir | 0o1000},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.s, func(t *testing.T) {
+			if expect, got := tc.s, tc.m.String(); expect != got {
+				t.Errorf("expected: %s", expect)
+				t.Errorf("got     : %s", got)
+			}
+		})
+	}
+}
+
 func timeParse(t *testing.T, v string) time.Time {
 	tm, err := time.Parse(time.RFC3339, v)
 	if err != nil {
