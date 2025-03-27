@@ -447,5 +447,11 @@ func (iw *Writer) writeHeader(hdr *Header) error {
 	return nil
 }
 
-// Write the end-of-archive sentinel trailer entry.
-func (iw *Writer) WriteTrailer() error { return iw.WriteHeader(&trailerHeader) }
+// Write the end-of-archive sentinel trailer entry and flush the writer.
+func (iw *Writer) WriteTrailer() error {
+	if err := iw.WriteHeader(&trailerHeader); err != nil {
+		return err
+	}
+
+	return iw.Flush()
+}
