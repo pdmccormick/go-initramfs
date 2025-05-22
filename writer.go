@@ -272,6 +272,16 @@ func (iw *Writer) writeAlignment(alignTo int64) error {
 // Default permissions for directory entries
 const DefaultMkdirPerm Mode = 0o700
 
+func PathPrefixSeq(path string) iter.Seq[string] {
+	return func(yield func(prefix string) bool) {
+		for _, prefix := range splitBytePrefixAll(path, '/') {
+			if !yield(prefix) {
+				return
+			}
+		}
+	}
+}
+
 func splitBytePrefixAll(s string, c byte) iter.Seq2[int, string] {
 	return func(yield func(index int, prefix string) bool) {
 		if !yield(0, ".") {
@@ -332,7 +342,7 @@ func (iw *Writer) MkdirAll(path string, perm Mode) error {
 		return nil
 	}
 
-	for _, prefix := range splitBytePrefixAll(path, '/') {
+	for prefix := range PathPrefixSeq(path) {
 		if err := iw.mkdir(prefix, perm); err != nil {
 			return err
 		}
