@@ -5,7 +5,6 @@ import (
 	"io"
 	"iter"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -376,13 +375,6 @@ func (iw *Writer) WriteHeader(hdr *Header) error {
 
 	if hdr.Trailer() {
 		clear(iw.mkdirs)
-	} else {
-		// Ensure that all parent directories have been added
-		dir := filepath.Dir(filename)
-
-		if err := iw.MkdirAll(dir, 0); err != nil {
-			return err
-		}
 	}
 
 	return iw.writeHeader(hdr)
